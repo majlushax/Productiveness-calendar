@@ -4,17 +4,38 @@ import { Breakdown, GoalBar, ScoreRing, scoreColor } from '../components/charts'
 import { DayAgenda } from '../components/DayAgenda';
 import { JournalSheet, StudySheet, WorkoutSheet } from '../components/QuickLogSheets';
 import { AddTaskSheet } from '../components/AddTaskSheet';
-import { EmptyState } from '../components/ui';
+import { EmptyState, useToast } from '../components/ui';
+import { GeminiError, scoreJournalEntry } from '../lib/gemini';
 import { currentStreak, scoreDay, scoreLabel } from '../lib/productivity';
 import {
   DAY_NAMES, formatDate, formatDuration, formatDueLabel, plural, todayISO, weekdayOf,
 } from '../lib/date';
 
 export function TodayScreen() {
-  const { data, toggleTask } = useStore();
+  const { data, toggleTask, deleteJournalEntry, updateJournalEntry } = useStore();
+  const toast = useToast();
   const today = todayISO();
 
   const [sheet, setSheet] = useState<'task' | 'workout' | 'study' | 'journal' | null>(null);
+  const [rescoring, setRescoring] = useState<string | null>(null);
+
+  const rescore = async (id: string, text: string) => {
+    setRescoring(id);
+    try {
+      const verdict = await scoreJournalEntry(data, text);
+      updateJournalEntry(id, {
+        score: verdict.score,
+        comment: verdict.comment,
+        category: verdict.category,
+        scoredBy: verdict.source,
+      });
+      toast(`Nowa ocena: ${verdict.score}/10`);
+    } catch (err) {
+      toast(err instanceof GeminiError ? err.message : 'Nie udało się ocenić wpisu');
+    } finally {
+      setRescoring(null);
+    }
+  };
 
   const score = useMemo(() => scoreDay(data, today), [data, today]);
   const streak = useMemo(() => currentStreak(data, today), [data, today]);
@@ -189,10 +210,33 @@ export function TodayScreen() {
                 <div className="card card-tight stack-sm" key={entry.id}>
                   <div className="row-between">
                     <span className="chip">{entry.category ?? 'wpis'}</span>
-                    <span className="mono strong">{entry.score}/10</span>
+                    <div className="row" style={{ gap: 8 }}>
+                      <span className="mono strong">{entry.score}/10</span>
+                      <button
+                        type="button"
+                        className="btn btn-plain"
+                        style={{ color: 'var(--text-3)', minHeight: 0, padding: 2 }}
+                        aria-label="Usuń wpis"
+                        onClick={() => deleteJournalEntry(entry.id)}
+                      >
+                        🗑
+                      </button>
+                    </div>
                   </div>
                   <p className="small">{entry.text}</p>
                   {entry.comment && <p className="tiny dim">{entry.comment}</p>}
+                  {entry.scoredBy === 'heuristic' && data.settings.geminiApiKey && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={rescoring === entry.id}
+                      onClick={() => rescore(entry.id, entry.text)}
+                    >
+                      {rescoring === entry.id
+                        ? <><span className="spinner" /> Oceniam…</>
+                        : '✨ Oceń przez AI'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
