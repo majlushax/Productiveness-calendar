@@ -34,9 +34,14 @@ początkowym.
 
 Jednorazowo, w ustawieniach repozytorium:
 
-1. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-2. Wypchnij zmiany — workflow `.github/workflows/deploy.yml` zbuduje i wgra apkę.
-3. Adres: `https://<twoja-nazwa>.github.io/Productiveness-calendar/`
+1. Repozytorium musi być **publiczne** (na darmowym planie Pages nie działa w prywatnych).
+2. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. Wypchnij zmiany na `main` — workflow `.github/workflows/deploy.yml` zbuduje i wgra apkę.
+4. Adres: `https://<twoja-nazwa>.github.io/Productiveness-calendar/`
+
+Publikuje wyłącznie gałąź `main`. Na pozostałych gałęziach ten sam workflow
+uruchamia testy i build jako zwykły check — dzięki temu push do gałęzi roboczej
+nie nadpisuje działającej aplikacji niescalonym kodem.
 
 > Po zmianie nazwy repozytorium trzeba zaktualizować stałą `BASE`
 > w `vite.config.ts` — inaczej Pages nie znajdzie plików.

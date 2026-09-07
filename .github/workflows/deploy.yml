@@ -1,8 +1,8 @@
-name: Deploy na GitHub Pages
+name: Testy i deploy na GitHub Pages
 
 on:
   push:
-    branches: [main, master, 'claude/**']
+    branches: ['**']
   workflow_dispatch:
 
 permissions:
@@ -10,9 +10,9 @@ permissions:
   pages: write
   id-token: write
 
-# Nowy deploy zastępuje trwający — liczy się zawsze najnowszy stan repozytorium.
+# Osobna kolejka na gałąź: push do gałęzi roboczej nie przerywa deployu z main.
 concurrency:
-  group: pages
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -34,18 +34,22 @@ jobs:
       - name: Build
         run: npm run build
 
-      # enablement: true włącza Pages przez API przy pierwszym uruchomieniu,
-      # zamiast wymagać ręcznego przestawienia Source w ustawieniach repozytorium.
+      # Publikuje wyłącznie gałąź główna. Na gałęziach roboczych workflow
+      # działa jako zwykły check (testy + build), żeby push do brancha
+      # nie nadpisywał działającej aplikacji niescalonym kodem.
       - uses: actions/configure-pages@v5
+        if: github.ref == 'refs/heads/main'
         with:
           enablement: true
 
       - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
         with:
           path: dist
 
   deploy:
     needs: build
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
