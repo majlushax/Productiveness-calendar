@@ -34,7 +34,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # enablement: true włącza Pages przez API przy pierwszym uruchomieniu,
+      # zamiast wymagać ręcznego przestawienia Source w ustawieniach repozytorium.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
