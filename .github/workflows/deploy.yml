@@ -34,22 +34,28 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Publikuje wyłącznie gałąź główna. Na gałęziach roboczych workflow
-      # działa jako zwykły check (testy + build), żeby push do brancha
+      # Publikuje wyłącznie gałąź domyślna repozytorium. Na pozostałych workflow
+      # działa jako zwykły check (testy + build), żeby push do gałęzi roboczej
       # nie nadpisywał działającej aplikacji niescalonym kodem.
+      #
+      # Warunek czyta gałąź domyślną z repozytorium zamiast wpisywać "main" na
+      # sztywno, bo środowisko github-pages i tak wpuszcza deploy tylko z niej —
+      # dwa niezależne źródła prawdy rozjeżdżały się i deploy padał bez śladu
+      # w logach. Dzięki temu zmiana gałęzi domyślnej w ustawieniach repozytorium
+      # nie wymaga ruszania tego pliku.
       - uses: actions/configure-pages@v5
-        if: github.ref == 'refs/heads/main'
+        if: github.ref_name == github.event.repository.default_branch
         with:
           enablement: true
 
       - uses: actions/upload-pages-artifact@v3
-        if: github.ref == 'refs/heads/main'
+        if: github.ref_name == github.event.repository.default_branch
         with:
           path: dist
 
   deploy:
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     environment:
       name: github-pages

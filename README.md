@@ -41,12 +41,20 @@ Jednorazowo, w ustawieniach repozytorium:
 
 1. Repozytorium musi być **publiczne** (na darmowym planie Pages nie działa w prywatnych).
 2. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-3. Wypchnij zmiany na `main` — workflow `.github/workflows/deploy.yml` zbuduje i wgra apkę.
+3. Wypchnij zmiany na gałąź domyślną — workflow `.github/workflows/deploy.yml`
+   zbuduje i wgra apkę.
 4. Adres: `https://<twoja-nazwa>.github.io/Productiveness-calendar/`
 
-Publikuje wyłącznie gałąź `main`. Na pozostałych gałęziach ten sam workflow
-uruchamia testy i build jako zwykły check — dzięki temu push do gałęzi roboczej
-nie nadpisuje działającej aplikacji niescalonym kodem.
+Publikuje wyłącznie **gałąź domyślna repozytorium**. Na pozostałych ten sam workflow
+uruchamia testy i build jako zwykły check — push do gałęzi roboczej nie nadpisuje
+działającej aplikacji niescalonym kodem.
+
+> Warunek w workflow czyta gałąź domyślną z repozytorium, zamiast wpisywać `main`
+> na sztywno. Środowisko `github-pages`, które GitHub tworzy przy włączaniu Pages,
+> i tak wpuszcza deploy wyłącznie z gałęzi domyślnej — przy dwóch niezależnych
+> źródłach prawdy deploy potrafi paść bez jednego wiersza w logach. Jeśli chcesz,
+> żeby produkcją była gałąź `main`, ustaw ją jako domyślną w
+> **Settings → General → Default branch**; workflow sam za tym pójdzie.
 
 > Po zmianie nazwy repozytorium trzeba zaktualizować stałą `BASE`
 > w `vite.config.ts` — inaczej Pages nie znajdzie plików.
