@@ -3,18 +3,40 @@ import { useStore } from '../store';
 import { Breakdown, GoalBar, ScoreRing, scoreColor } from '../components/charts';
 import { DayAgenda } from '../components/DayAgenda';
 import { JournalSheet, StudySheet, WorkoutSheet } from '../components/QuickLogSheets';
+import { MealSheet } from '../components/MealSheet';
 import { AddTaskSheet } from '../components/AddTaskSheet';
-import { EmptyState } from '../components/ui';
+import { EmptyState, useToast } from '../components/ui';
+import { GeminiError, scoreJournalEntry } from '../lib/gemini';
 import { currentStreak, scoreDay, scoreLabel } from '../lib/productivity';
 import {
   DAY_NAMES, formatDate, formatDuration, formatDueLabel, plural, todayISO, weekdayOf,
 } from '../lib/date';
 
 export function TodayScreen() {
-  const { data, toggleTask } = useStore();
+  const { data, toggleTask, deleteJournalEntry, updateJournalEntry } = useStore();
+  const toast = useToast();
   const today = todayISO();
 
-  const [sheet, setSheet] = useState<'task' | 'workout' | 'study' | 'journal' | null>(null);
+  const [sheet, setSheet] = useState<'task' | 'workout' | 'study' | 'meal' | 'journal' | null>(null);
+  const [rescoring, setRescoring] = useState<string | null>(null);
+
+  const rescore = async (id: string, text: string) => {
+    setRescoring(id);
+    try {
+      const verdict = await scoreJournalEntry(data, text);
+      updateJournalEntry(id, {
+        score: verdict.score,
+        comment: verdict.comment,
+        category: verdict.category,
+        scoredBy: verdict.source,
+      });
+      toast(`Nowa ocena: ${verdict.score}/10`);
+    } catch (err) {
+      toast(err instanceof GeminiError ? err.message : 'Nie udało się ocenić wpisu');
+    } finally {
+      setRescoring(null);
+    }
+  };
 
   const score = useMemo(() => scoreDay(data, today), [data, today]);
   const streak = useMemo(() => currentStreak(data, today), [data, today]);
@@ -63,6 +85,11 @@ export function TodayScreen() {
                 <div>📚 {formatDuration(score.detail.studyMinutes)} nauki</div>
                 <div>💪 {score.detail.workoutsLast7}/{goals.workoutsPerWeek} treningów w 7 dni</div>
                 <div>
+                  🍽 {score.detail.mealsLogged === 0
+                    ? 'brak posiłków'
+                    : `${score.detail.mealsLogged} ${plural(score.detail.mealsLogged, 'posiłek', 'posiłki', 'posiłków')}, ${score.detail.mealPoints}/${goals.mealsPerDay * 10} pkt`}
+                </div>
+                <div>
                   📝 {score.detail.journalScore === null
                     ? 'brak wpisu'
                     : `wpis oceniony na ${score.detail.journalScore.toFixed(0)}/10`}
@@ -100,6 +127,16 @@ export function TodayScreen() {
 
           <div className="stack-sm">
             <div className="row-between small">
+              <span className="muted">Jedzenie wg diety</span>
+              <span className="mono strong">
+                {score.detail.mealPoints} / {goals.mealsPerDay * 10}
+              </span>
+            </div>
+            <GoalBar value={score.detail.mealPoints} goal={goals.mealsPerDay * 10} color="var(--series-5)" />
+          </div>
+
+          <div className="stack-sm">
+            <div className="row-between small">
               <span className="muted">Punkty za zadania</span>
               <span className="mono strong">
                 {score.detail.taskPoints} / {goals.taskPointsPerDay}
@@ -112,10 +149,11 @@ export function TodayScreen() {
         {/* ------------------------ szybkie akcje -------------------------- */}
         <section className="stack-sm">
           <div className="section-label">Dopisz do dzisiaj</div>
-          <div className="row" style={{ gap: 8 }}>
-            <button type="button" className="btn grow" onClick={() => setSheet('workout')}>💪 Trening</button>
-            <button type="button" className="btn grow" onClick={() => setSheet('study')}>📚 Nauka</button>
-            <button type="button" className="btn grow" onClick={() => setSheet('journal')}>📝 Wpis</button>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <button type="button" className="btn" onClick={() => setSheet('workout')}>💪 Trening</button>
+            <button type="button" className="btn" onClick={() => setSheet('study')}>📚 Nauka</button>
+            <button type="button" className="btn" onClick={() => setSheet('meal')}>🍽 Posiłek</button>
+            <button type="button" className="btn" onClick={() => setSheet('journal')}>📝 Wpis</button>
           </div>
         </section>
 
@@ -189,10 +227,33 @@ export function TodayScreen() {
                 <div className="card card-tight stack-sm" key={entry.id}>
                   <div className="row-between">
                     <span className="chip">{entry.category ?? 'wpis'}</span>
-                    <span className="mono strong">{entry.score}/10</span>
+                    <div className="row" style={{ gap: 8 }}>
+                      <span className="mono strong">{entry.score}/10</span>
+                      <button
+                        type="button"
+                        className="btn btn-plain"
+                        style={{ color: 'var(--text-3)', minHeight: 0, padding: 2 }}
+                        aria-label="Usuń wpis"
+                        onClick={() => deleteJournalEntry(entry.id)}
+                      >
+                        🗑
+                      </button>
+                    </div>
                   </div>
                   <p className="small">{entry.text}</p>
                   {entry.comment && <p className="tiny dim">{entry.comment}</p>}
+                  {entry.scoredBy === 'heuristic' && data.settings.geminiApiKey && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={rescoring === entry.id}
+                      onClick={() => rescore(entry.id, entry.text)}
+                    >
+                      {rescoring === entry.id
+                        ? <><span className="spinner" /> Oceniam…</>
+                        : '✨ Oceń przez AI'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -201,6 +262,7 @@ export function TodayScreen() {
       </div>
 
       <AddTaskSheet open={sheet === 'task'} onClose={() => setSheet(null)} />
+      <MealSheet open={sheet === 'meal'} onClose={() => setSheet(null)} />
       <WorkoutSheet open={sheet === 'workout'} onClose={() => setSheet(null)} />
       <StudySheet open={sheet === 'study'} onClose={() => setSheet(null)} />
       <JournalSheet open={sheet === 'journal'} onClose={() => setSheet(null)} />

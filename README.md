@@ -11,7 +11,12 @@ zrobić zadania, i liczy dzienny wskaźnik produktywności.
   wolnych oknach — omija lekcje z planu tygodnia, trzyma dzienny limit nauki
   i kończy pracę z zapasem przed terminem.
 - **Wskaźnik produktywności 0–100.** Składa się z ukończonych zadań, czasu nauki,
-  treningów (w oknie 7 dni) i ocenionych przez AI wpisów „co dziś zrobiłem".
+  treningów (w oknie 7 dni), zgodności posiłków z Twoją dietą i ocenionych przez AI
+  wpisów „co dziś zrobiłem".
+- **Jedzenie według Twoich zasad.** Opisujesz swoją dietę własnymi słowami, a AI ocenia
+  każdy posiłek względem tego opisu — nie względem ogólnych wyobrażeń o zdrowym jedzeniu.
+- **Własne wytyczne dla AI.** Pole na instrukcje doklejane do każdego zapytania:
+  kim jesteś, jak ma z Tobą rozmawiać, co ma brać pod uwagę przy ocenach.
 - **Seria dni.** Każdy dzień powyżej ustawionego progu przedłuża streak.
 - **Statystyki.** Wynik dzień po dniu, trend względem poprzedniego okresu,
   rozbicie na kategorie i podsumowanie tygodnia napisane przez AI.
@@ -34,9 +39,14 @@ początkowym.
 
 Jednorazowo, w ustawieniach repozytorium:
 
-1. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-2. Wypchnij zmiany — workflow `.github/workflows/deploy.yml` zbuduje i wgra apkę.
-3. Adres: `https://<twoja-nazwa>.github.io/Productiveness-calendar/`
+1. Repozytorium musi być **publiczne** (na darmowym planie Pages nie działa w prywatnych).
+2. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. Wypchnij zmiany na `main` — workflow `.github/workflows/deploy.yml` zbuduje i wgra apkę.
+4. Adres: `https://<twoja-nazwa>.github.io/Productiveness-calendar/`
+
+Publikuje wyłącznie gałąź `main`. Na pozostałych gałęziach ten sam workflow
+uruchamia testy i build jako zwykły check — dzięki temu push do gałęzi roboczej
+nie nadpisuje działającej aplikacji niescalonym kodem.
 
 > Po zmianie nazwy repozytorium trzeba zaktualizować stałą `BASE`
 > w `vite.config.ts` — inaczej Pages nie znajdzie plików.
@@ -44,7 +54,8 @@ Jednorazowo, w ustawieniach repozytorium:
 ## Klucz Gemini (opcjonalny)
 
 1. Wejdź na [aistudio.google.com/apikey](https://aistudio.google.com/apikey) i wygeneruj
-   klucz — darmowy limit spokojnie wystarcza do prywatnego użytku.
+   klucz. Darmowy tier ma limity zapytań (na minutę i na dobę), nie płacisz za tokeny —
+   przy prywatnym użytku te limity są nieosiągalne.
 2. W aplikacji: **Ustawienia → Gemini → Klucz API**, wklej i dotknij **Testuj**.
 3. Przycisk **Pobierz modele** wypełni listę modeli dostępnych dla Twojego klucza.
 
@@ -56,8 +67,14 @@ z telefonu do API Gemini.
 
 1. **Ustawienia → Plan tygodnia** — wpisz lekcje i stałe zajęcia. Bez tego planer
    zakłada, że masz wolny cały dzień.
-2. **Ustawienia → Cele** — ustaw treningi na tydzień, minuty nauki dziennie i próg serii.
-3. **Dziś → + Zadanie** — dodaj pierwsze zadanie i zobacz, jak wskoczy w grafik.
+2. **Ustawienia → Dieta** — opisz swoje zasady żywieniowe, np. „steki, wołowina, jajka,
+   ziemniaki, ryż, owoce i warzywa; bez fast foodów i słodyczy". Bez tego posiłki dostają
+   tylko prostą ocenę lokalną opartą na słowach kluczowych.
+3. **Ustawienia → Twoje wytyczne dla AI** — opcjonalnie napisz, kim jesteś i jak AI ma
+   Cię oceniać. Trafia to do każdego zapytania.
+4. **Ustawienia → Cele** — ustaw treningi na tydzień, minuty nauki dziennie, liczbę
+   posiłków i próg serii.
+5. **Dziś → + Zadanie** — dodaj pierwsze zadanie i zobacz, jak wskoczy w grafik.
 
 ## Kopia zapasowa
 
@@ -94,14 +111,23 @@ Cztery składniki, każdy z własną wagą (do zmiany w Ustawieniach):
 
 | Składnik | Domyślna waga | Jak mierzony |
 |---|---|---|
-| Zadania | 35 | suma trudności zadań ukończonych tego dnia / cel dzienny |
-| Nauka | 30 | minuty z zrobionych bloków i ręcznych wpisów / cel dzienny |
+| Zadania | 30 | suma trudności zadań ukończonych tego dnia / cel dzienny |
+| Nauka | 25 | minuty z zrobionych bloków i ręcznych wpisów / cel dzienny |
 | Siłownia | 20 | treningi z ostatnich 7 dni / cel tygodniowy |
-| Wpisy | 15 | ocena AI wpisu „co dziś zrobiłem" (0–10) |
+| Jedzenie | 15 | suma ocen posiłków / (liczba posiłków w celu × 10) |
+| Wpisy | 10 | ocena AI wpisu „co dziś zrobiłem" (0–10) |
 
 Trening liczony jest w oknie tygodniowym, żeby dzień przerwy nie zjeżdżał wyniku
-do zera. Jeśli danego dnia nie ma wpisu, jego waga rozkłada się proporcjonalnie na
-pozostałe składniki — brak notatki nie karze wyniku.
+do zera.
+
+Jedzenie liczy jednocześnie jakość i regularność: trzy posiłki po 8/10 dają 0,8,
+a jeden idealny 10/10 tylko 0,33. Śmieciowy posiłek nie odejmuje punktów, ale zajmuje
+miejsce w mianowniku — dzień na fast foodach wychodzi nisko sam z siebie, bez karania
+za szczerość w zapisywaniu.
+
+Kategorie oparte na dobrowolnym zapisie (jedzenie, wpisy) nie karzą za brak danych:
+w dniu bez posiłków albo bez notatki ich waga rozkłada się proporcjonalnie na
+pozostałe składniki.
 
 ## Ograniczenia
 

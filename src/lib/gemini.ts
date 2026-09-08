@@ -1,4 +1,4 @@
-import type { AppData, Difficulty, ISODate, TaskEstimate } from '../types';
+import type { AppData, Difficulty, ISODate, Meal, TaskEstimate } from '../types';
 import { formatDate, todayISO } from './date';
 import { heuristicEstimate } from './parse';
 
@@ -162,6 +162,16 @@ function parseJsonPayload(text: string): unknown {
   }
 }
 
+/**
+ * Wytyczne wpisane przez użytkownika w Ustawieniach. Doklejane do każdego
+ * zapytania, żeby AI oceniało według jego zasad, a nie ogólnych domyślnych.
+ */
+function instructionsBlock(data: AppData): string {
+  const text = data.settings.aiInstructions.trim();
+  if (!text) return '';
+  return `\nWytyczne od użytkownika — traktuj je nadrzędnie wobec ogólnych zasad powyżej:\n"""${text}"""\n`;
+}
+
 /** Kontekst z historii — dzięki niemu oceny są dopasowane do konkretnej osoby. */
 function historyContext(data: AppData): string {
   const done = data.tasks
@@ -214,7 +224,7 @@ Zadanie użytkownika opisane własnymi słowami:
 """${input}"""
 
 ${historyContext(data)}
-
+${instructionsBlock(data)}
 Oceń to zadanie i zwróć JSON:
 - title: krótki, konkretny tytuł zadania po polsku (bez daty w tytule),
 - subject: przedmiot szkolny (np. "WOS", "Matematyka"), pomiń pole jeśli nie wynika z treści,
@@ -281,7 +291,7 @@ Cele użytkownika: ${goals.studyMinutesPerDay} min nauki dziennie, ${goals.worko
 
 Notatka:
 """${text}"""
-
+${instructionsBlock(data)}
 Zwróć JSON:
 - score: liczba 0-10. 0 to dzień całkowicie zmarnowany, 5 to przeciętny dzień z jedną sensowną rzeczą, 8-10 to dzień z realnym postępem w nauce, sporcie albo własnych projektach. Odpoczynek po ciężkim okresie nie jest marnowaniem czasu, ale sam scrollowanie telefonu tak.
 - comment: jedno-dwa zdania po polsku, bezpośrednio do użytkownika (na "ty"). Bądź konkretny i uczciwy — bez pustych pochwał i bez moralizowania. Jeśli dzień był słaby, powiedz to wprost i zaproponuj jedną konkretną rzecz na jutro.
@@ -410,6 +420,8 @@ export async function reviewWeek(
     workouts: number;
     tasksDone: number;
     tasksOverdue: number;
+    mealsLogged: number;
+    mealAverage: number | null;
     journalNotes: string[];
   },
   signal?: AbortSignal,
@@ -417,9 +429,11 @@ export async function reviewWeek(
   const { geminiApiKey, geminiModel, goals } = data.settings;
   if (!geminiApiKey) throw new GeminiError('Brak klucza API. Wpisz go w Ustawieniach.');
 
+  // Dieta jest częścią obrazu tygodnia, więc model musi wiedzieć, do czego porównuje.
+  const diet = data.settings.dietDescription.trim();
   const prompt = `Analizujesz tydzień polskiego ucznia i piszesz krótkie, konkretne podsumowanie.
 
-Cele: ${goals.studyMinutesPerDay} min nauki dziennie, ${goals.workoutsPerWeek} treningi tygodniowo.
+Cele: ${goals.studyMinutesPerDay} min nauki dziennie, ${goals.workoutsPerWeek} treningi tygodniowo, ${goals.mealsPerDay} zapisane posiłki dziennie.${diet ? `\nDieta użytkownika: """${diet}"""` : ''}
 
 Dane z ostatnich 7 dni:
 - wyniki dzienne (0-100): ${stats.days.map((d) => `${d.date}: ${d.score}`).join(', ')}
@@ -427,8 +441,9 @@ Dane z ostatnich 7 dni:
 - treningi: ${stats.workouts}
 - ukończone zadania: ${stats.tasksDone}
 - zadania po terminie: ${stats.tasksOverdue}
+- zapisane posiłki: ${stats.mealsLogged}${stats.mealAverage === null ? '' : `, średnia zgodność z dietą ${stats.mealAverage.toFixed(1)}/10`}
 - własne notatki użytkownika: ${stats.journalNotes.length ? stats.journalNotes.map((n) => `"${n}"`).join('; ') : 'brak'}
-
+${instructionsBlock(data)}
 Zwróć JSON:
 - summary: 2-3 zdania po polsku, na "ty". Odnieś się do konkretnych liczb powyżej. Bez pustych pochwał, bez ogólników typu "trzymaj tak dalej".
 - wins: 1-3 krótkie punkty, co realnie wyszło w tym tygodniu (jeśli nic — pusta tablica).
@@ -442,4 +457,91 @@ Odpowiedz wyłącznie JSON-em.`;
     wins: Array.isArray(raw.wins) ? raw.wins.map(String).slice(0, 3) : [],
     focus: Array.isArray(raw.focus) ? raw.focus.map(String).slice(0, 3) : [],
   };
+}
+
+/* ----------------------------- posiłki ---------------------------- */
+
+const MEAL_SCHEMA: JsonSchema = {
+  type: 'OBJECT',
+  properties: {
+    score: { type: 'NUMBER' },
+    comment: { type: 'STRING' },
+  },
+  required: ['score', 'comment'],
+};
+
+export interface MealVerdict {
+  score: number;
+  comment: string;
+  source: 'ai' | 'heuristic';
+}
+
+/**
+ * Ocena posiłku względem diety opisanej przez użytkownika w Ustawieniach.
+ * Bez opisu diety model nie ma czego trzymać się jako punktu odniesienia,
+ * więc wtedy schodzimy do oceny lokalnej zamiast zgadywać czyjeś zasady.
+ */
+export async function scoreMeal(
+  data: AppData,
+  meal: Pick<Meal, 'kind' | 'description'>,
+  signal?: AbortSignal,
+): Promise<MealVerdict> {
+  const { geminiApiKey, geminiModel, dietDescription } = data.settings;
+  if (!geminiApiKey || !dietDescription.trim()) return heuristicMeal(meal.description);
+
+  const prompt = `Oceniasz, na ile posiłek pasuje do diety konkretnej osoby.
+
+Dieta tej osoby, opisana jej własnymi słowami:
+"""${dietDescription.trim()}"""
+
+Posiłek (${meal.kind}):
+"""${meal.description}"""
+${instructionsBlock(data)}
+Zwróć JSON:
+- score: liczba 0-10 oznaczająca zgodność z opisaną wyżej dietą. 10 to posiłek dokładnie w jej duchu, 5 to neutralny, 0 to coś, co ta dieta wyklucza. Oceniaj wyłącznie względem opisu powyżej, a nie własnych przekonań o zdrowym odżywianiu — jeśli ktoś je dużo mięsa i to jest jego dieta, mięso jest zgodne.
+- comment: jedno zdanie po polsku, na "ty". Konkretnie, co w tym posiłku pasuje albo nie pasuje. Bez pouczania i bez ogólników o zdrowym stylu życia.
+
+Odpowiedz wyłącznie JSON-em.`;
+
+  try {
+    const raw = (await callModel(geminiApiKey, geminiModel, prompt, MEAL_SCHEMA, signal)) as Record<string, unknown>;
+    return {
+      score: Math.max(0, Math.min(10, Number(raw.score) || 0)),
+      comment: String(raw.comment ?? '').trim(),
+      source: 'ai',
+    };
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw err;
+    throw new GeminiError(
+      err instanceof GeminiError ? err.message : 'Nie udało się ocenić posiłku przez AI.',
+    );
+  }
+}
+
+/** Produkty nieprzetworzone — baza większości diet opartych na prawdziwym jedzeniu. */
+const WHOLE_FOODS = /stek|wołowin|wolowin|schab|karkówk|karkowk|kurczak|indyk|ryb|łosoś|losos|dorsz|tuńczyk|tunczyk|jaj[ak]|ziemniak|batat|ryż|ryz|kasz|owsian|warzyw|sałat|salat|brokuł|brokul|marchew|pomidor|ogórek|ogorek|owoc|jabłk|jablk|banan|jagod|truskaw|borówk|borowk|twaróg|twarog|jogurt|ser\b|masł|masl|oliw|orzech|miód|miod|szpinak|kapust|cukini|papryk/i;
+
+/** Żywność mocno przetworzona i słodycze. */
+const JUNK_FOODS = /fast ?food|mcdonald|kfc|burger king|frytk|chips|chipsy|batonik|snickers|żelk|zelk|cukierk|pączek|paczek|drożdżówk|drozdzowk|ciastk|lody|cola|pepsi|energetyk|monster|chipsy|kebab|pizza|hot ?dog|parówk|parowk|słodycz|slodycz|napój gazowany|napoj gazowany|fanta|sprite|krem czekoladow|nutella/i;
+
+/**
+ * Ocena lokalna, gdy nie ma klucza albo opisu diety.
+ * Liczy trafienia w produkty nieprzetworzone i odejmuje za przetworzone —
+ * to przybliżenie, nie zna Twoich zasad, więc nie udaje precyzji.
+ */
+export function heuristicMeal(description: string): MealVerdict {
+  const text = description.toLowerCase();
+  const good = (text.match(new RegExp(WHOLE_FOODS.source, 'gi')) ?? []).length;
+  const bad = (text.match(new RegExp(JUNK_FOODS.source, 'gi')) ?? []).length;
+
+  let score = 5 + Math.min(4, good * 2) - Math.min(5, bad * 3);
+  score = Math.max(0, Math.min(10, score));
+
+  const comment = bad > 0
+    ? 'Ocena lokalna: rozpoznano produkty mocno przetworzone.'
+    : good > 0
+      ? 'Ocena lokalna: rozpoznano nieprzetworzone produkty.'
+      : 'Ocena lokalna — opisz dietę w Ustawieniach, żeby AI oceniało według Twoich zasad.';
+
+  return { score, comment, source: 'heuristic' };
 }

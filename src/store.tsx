@@ -3,7 +3,7 @@ import {
   type ReactNode,
 } from 'react';
 import type {
-  AppData, FixedEvent, ISODate, JournalEntry, Settings, StudyBlock, StudySession,
+  AppData, FixedEvent, ISODate, JournalEntry, Meal, Settings, StudyBlock, StudySession,
   Task, TaskEstimate, Workout,
 } from './types';
 import { load, save, uid } from './lib/storage';
@@ -25,6 +25,9 @@ interface Store {
   deleteWorkout: (id: string) => void;
   addStudySession: (session: Omit<StudySession, 'id'>) => void;
   deleteStudySession: (id: string) => void;
+  addMeal: (meal: Omit<Meal, 'id' | 'createdAt'>) => Meal;
+  updateMeal: (id: string, patch: Partial<Meal>) => void;
+  deleteMeal: (id: string) => void;
   addJournalEntry: (entry: Omit<JournalEntry, 'id' | 'createdAt'>) => JournalEntry;
   updateJournalEntry: (id: string, patch: Partial<JournalEntry>) => void;
   deleteJournalEntry: (id: string) => void;
@@ -167,6 +170,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     patch((d) => ({ ...d, studySessions: d.studySessions.filter((s) => s.id !== id) }));
   }, [patch]);
 
+  const addMeal = useCallback<Store['addMeal']>((meal) => {
+    const created: Meal = { ...meal, id: uid(), createdAt: new Date().toISOString() };
+    patch((d) => ({ ...d, meals: [...d.meals, created] }));
+    return created;
+  }, [patch]);
+
+  const updateMeal = useCallback<Store['updateMeal']>((id, mealPatch) => {
+    patch((d) => ({
+      ...d,
+      meals: d.meals.map((m) => (m.id === id ? { ...m, ...mealPatch } : m)),
+    }));
+  }, [patch]);
+
+  const deleteMeal = useCallback<Store['deleteMeal']>((id) => {
+    patch((d) => ({ ...d, meals: d.meals.filter((m) => m.id !== id) }));
+  }, [patch]);
+
   const addJournalEntry = useCallback<Store['addJournalEntry']>((entry) => {
     const created: JournalEntry = { ...entry, id: uid(), createdAt: new Date().toISOString() };
     patch((d) => ({ ...d, journal: [...d.journal, created] }));
@@ -216,7 +236,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const resetAll = useCallback(() => {
     setData((prev) => ({
       ...prev,
-      tasks: [], blocks: [], workouts: [], studySessions: [], journal: [],
+      tasks: [], blocks: [], workouts: [], studySessions: [], meals: [], journal: [],
     }));
     setWarnings([]);
   }, []);
@@ -224,13 +244,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Store>(() => ({
     data, warnings, addTask, updateTask, toggleTask, deleteTask, replan,
     setBlockStatus, moveBlock, deleteBlock, addWorkout, deleteWorkout,
-    addStudySession, deleteStudySession, addJournalEntry, updateJournalEntry,
+    addStudySession, deleteStudySession, addMeal, updateMeal, deleteMeal,
+    addJournalEntry, updateJournalEntry,
     deleteJournalEntry, addFixedEvent, updateFixedEvent, deleteFixedEvent,
     updateSettings, replaceAll, resetAll,
   }), [
     data, warnings, addTask, updateTask, toggleTask, deleteTask, replan,
     setBlockStatus, moveBlock, deleteBlock, addWorkout, deleteWorkout,
-    addStudySession, deleteStudySession, addJournalEntry, updateJournalEntry,
+    addStudySession, deleteStudySession, addMeal, updateMeal, deleteMeal,
+    addJournalEntry, updateJournalEntry,
     deleteJournalEntry, addFixedEvent, updateFixedEvent, deleteFixedEvent,
     updateSettings, replaceAll, resetAll,
   ]);

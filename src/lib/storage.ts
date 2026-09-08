@@ -6,16 +6,20 @@ export const DATA_VERSION = 1;
 export const DEFAULT_SETTINGS: Settings = {
   geminiApiKey: '',
   geminiModel: 'gemini-2.5-flash',
+  aiInstructions: '',
+  dietDescription: '',
   goals: {
     workoutsPerWeek: 3,
     studyMinutesPerDay: 120,
     taskPointsPerDay: 6,
+    mealsPerDay: 3,
   },
   weights: {
-    tasks: 35,
-    study: 30,
+    tasks: 30,
+    study: 25,
     workout: 20,
-    journal: 15,
+    meals: 15,
+    journal: 10,
   },
   availability: {
     weekday: { start: '16:00', end: '22:00' },
@@ -38,6 +42,7 @@ export function emptyData(): AppData {
     fixedEvents: [],
     workouts: [],
     studySessions: [],
+    meals: [],
     journal: [],
     settings: structuredClone(DEFAULT_SETTINGS),
   };
@@ -55,6 +60,7 @@ export function normalize(raw: unknown): AppData {
     fixedEvents: Array.isArray(d.fixedEvents) ? d.fixedEvents : [],
     workouts: Array.isArray(d.workouts) ? d.workouts : [],
     studySessions: Array.isArray(d.studySessions) ? d.studySessions : [],
+    meals: Array.isArray(d.meals) ? d.meals : [],
     journal: Array.isArray(d.journal) ? d.journal : [],
     settings: {
       ...base.settings,

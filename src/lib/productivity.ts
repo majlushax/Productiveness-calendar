@@ -4,13 +4,20 @@ import { addDays, dateRange, daysBetween, todayISO } from './date';
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 /**
- * Wynik dnia 0–100 z czterech składników.
+ * Wynik dnia 0–100 z pięciu składników.
  *
  * Trening liczony jest w oknie 7 dni, a nie "czy dziś był" — dzień przerwy
  * między treningami nie powinien zjeżdżać wskaźnika do zera.
  *
- * Jeśli danego dnia nie ma wpisu do dziennika, waga wpisu rozkłada się
- * proporcjonalnie na pozostałe składniki, żeby brak notatki nie karał wyniku.
+ * Jedzenie liczy się jako suma ocen posiłków wobec celu (liczba posiłków × 10).
+ * Dzięki temu liczy się i jakość, i regularność: trzy posiłki po 8/10 dają 0,8,
+ * a jeden idealny posiłek 10/10 tylko 0,33. Śmieciowy posiłek nie odejmuje
+ * punktów, ale zajmuje miejsce w mianowniku — dzień na fast foodach wychodzi
+ * nisko sam z siebie, bez karania za szczerość w zapisywaniu.
+ *
+ * Kategorie oparte na dobrowolnym zapisie (jedzenie, wpis do dziennika) nie
+ * karzą za brak danych: gdy danego dnia nic nie zapisano, ich waga rozkłada
+ * się proporcjonalnie na pozostałe składniki.
  */
 export function scoreDay(data: AppData, date: ISODate): DayScore {
   const { goals, weights } = data.settings;
@@ -34,6 +41,10 @@ export function scoreDay(data: AppData, date: ISODate): DayScore {
   ).length;
   const workedOutToday = data.workouts.some((w) => w.date === date);
 
+  const dayMeals = data.meals.filter((m) => m.date === date && typeof m.score === 'number');
+  const mealPoints = dayMeals.reduce((sum, m) => sum + (m.score ?? 0), 0);
+  const mealTarget = goals.mealsPerDay * 10;
+
   const entries = data.journal.filter((j) => j.date === date && typeof j.score === 'number');
   const journalScore = entries.length
     ? entries.reduce((sum, j) => sum + (j.score ?? 0), 0) / entries.length
@@ -43,23 +54,28 @@ export function scoreDay(data: AppData, date: ISODate): DayScore {
     tasks: goals.taskPointsPerDay > 0 ? clamp01(taskPoints / goals.taskPointsPerDay) : 0,
     study: goals.studyMinutesPerDay > 0 ? clamp01(studyMinutes / goals.studyMinutesPerDay) : 0,
     workout: goals.workoutsPerWeek > 0 ? clamp01(workoutsLast7 / goals.workoutsPerWeek) : 0,
+    meals: mealTarget > 0 ? clamp01(mealPoints / mealTarget) : 0,
     journal: journalScore === null ? 0 : clamp01(journalScore / 10),
   };
 
-  // Rozkład wag: bez wpisu waga dziennika idzie na pozostałe składniki.
+  // Rozkład wag: kategorie bez danych oddają swoją wagę pozostałym.
   const active = { ...weights };
   if (journalScore === null) active.journal = 0;
-  const sum = active.tasks + active.study + active.workout + active.journal;
+  if (dayMeals.length === 0) active.meals = 0;
+  const sum = active.tasks + active.study + active.workout + active.meals + active.journal;
   const scale = sum > 0 ? 100 / sum : 0;
 
   const parts = {
     tasks: ratios.tasks * active.tasks * scale,
     study: ratios.study * active.study * scale,
     workout: ratios.workout * active.workout * scale,
+    meals: ratios.meals * active.meals * scale,
     journal: ratios.journal * active.journal * scale,
   };
 
-  const total = Math.round(parts.tasks + parts.study + parts.workout + parts.journal);
+  const total = Math.round(
+    parts.tasks + parts.study + parts.workout + parts.meals + parts.journal,
+  );
 
   return {
     date,
@@ -68,6 +84,7 @@ export function scoreDay(data: AppData, date: ISODate): DayScore {
       tasks: Math.round(parts.tasks),
       study: Math.round(parts.study),
       workout: Math.round(parts.workout),
+      meals: Math.round(parts.meals),
       journal: Math.round(parts.journal),
     },
     detail: {
@@ -76,6 +93,8 @@ export function scoreDay(data: AppData, date: ISODate): DayScore {
       studyMinutes,
       workoutsLast7,
       workedOutToday,
+      mealPoints,
+      mealsLogged: dayMeals.length,
       journalScore,
     },
   };
@@ -125,6 +144,7 @@ export function earliestDate(data: AppData): ISODate | null {
     ...data.tasks.map((t) => t.createdAt.slice(0, 10)),
     ...data.workouts.map((w) => w.date),
     ...data.studySessions.map((s) => s.date),
+    ...data.meals.map((m) => m.date),
     ...data.journal.map((j) => j.date),
     ...data.blocks.map((b) => b.date),
   ].filter(Boolean);

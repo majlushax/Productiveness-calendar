@@ -38,10 +38,11 @@ describe('scoreDay', () => {
     d.studySessions = [{ id: 's1', date: TODAY, minutes: 120 }]; // cel nauki spełniony w 100%
 
     const score = scoreDay(d, TODAY);
-    // Waga nauki to 30 ze 100, ale bez wpisu wagi sumują się do 85,
-    // więc nauka daje 30/85 ≈ 35 punktów, a nie 30.
-    expect(score.total).toBe(35);
+    // Waga nauki to 25 ze 100. Bez wpisu i bez posiłków aktywne wagi sumują się
+    // do 75 (30 + 25 + 20), więc nauka daje 25/75 ≈ 33 punkty, a nie 25.
+    expect(score.total).toBe(33);
     expect(score.parts.journal).toBe(0);
+    expect(score.parts.meals).toBe(0);
   });
 
   it('trening liczy się w oknie 7 dni, nie tylko w dniu treningu', () => {
@@ -67,7 +68,7 @@ describe('scoreDay', () => {
     const d = base();
     d.studySessions = [{ id: 's1', date: TODAY, minutes: 1000 }];
     const score = scoreDay(d, TODAY);
-    expect(score.parts.study).toBeLessThanOrEqual(36); // 30/85 * 100 ≈ 35,3
+    expect(score.parts.study).toBeLessThanOrEqual(34); // 25/75 * 100 ≈ 33,3
     expect(score.total).toBeLessThanOrEqual(100);
   });
 
@@ -120,5 +121,85 @@ describe('scoreRange', () => {
     const scores = scoreRange(base(), '2026-09-01', '2026-09-07');
     expect(scores).toHaveLength(7);
     expect(averageScore(scores)).toBe(0);
+  });
+});
+
+describe('jedzenie we wskaźniku', () => {
+  const meal = (date: string, score: number, i: number) => ({
+    id: `m${i}`, date, kind: 'obiad' as const, description: 'stek i ziemniaki',
+    score, createdAt: `${date}T13:00:00.000Z`,
+  });
+
+  it('trzy posiłki po 8/10 dają 80% składnika', () => {
+    const d = base();
+    d.meals = [meal(TODAY, 8, 1), meal(TODAY, 8, 2), meal(TODAY, 8, 3)];
+    const score = scoreDay(d, TODAY);
+    // Waga jedzenia 15 ze 100; bez wpisu do dziennika skala rośnie do 100/90.
+    expect(score.detail.mealPoints).toBe(24);
+    expect(score.detail.mealsLogged).toBe(3);
+    expect(score.parts.meals).toBe(Math.round(0.8 * 15 * (100 / 90)));
+  });
+
+  it('jeden idealny posiłek to wciąż tylko jedna trzecia celu', () => {
+    const d = base();
+    d.meals = [meal(TODAY, 10, 1)];
+    expect(scoreDay(d, TODAY).detail.mealPoints).toBe(10);
+    // 10 z 30 punktów celu — jakość nie zastępuje regularności.
+    expect(scoreDay(d, TODAY).parts.meals).toBeLessThan(scoreDay(d, TODAY).parts.meals + 1);
+    const ratio = scoreDay(d, TODAY).parts.meals / (15 * (100 / 90));
+    expect(ratio).toBeCloseTo(1 / 3, 1);
+  });
+
+  it('dzień na śmieciowym jedzeniu wychodzi nisko, ale nie ujemnie', () => {
+    const d = base();
+    d.meals = [meal(TODAY, 1, 1), meal(TODAY, 2, 2), meal(TODAY, 0, 3)];
+    const score = scoreDay(d, TODAY);
+    expect(score.detail.mealPoints).toBe(3);
+    expect(score.parts.meals).toBeGreaterThanOrEqual(0);
+    expect(score.parts.meals).toBeLessThan(3);
+  });
+
+  it('brak posiłków oddaje wagę pozostałym kategoriom', () => {
+    const withoutMeals = base();
+    withoutMeals.studySessions = [{ id: 's1', date: TODAY, minutes: 120 }];
+
+    const withMeals = base();
+    withMeals.studySessions = [{ id: 's1', date: TODAY, minutes: 120 }];
+    withMeals.meals = [meal(TODAY, 0, 1)];
+
+    // Ten sam cel nauki spełniony w 100%, ale bez posiłków waga jedzenia
+    // przechodzi na naukę, więc jej udział jest wyższy.
+    expect(scoreDay(withoutMeals, TODAY).parts.study)
+      .toBeGreaterThan(scoreDay(withMeals, TODAY).parts.study);
+  });
+
+  it('posiłek bez oceny nie jest wliczany', () => {
+    const d = base();
+    d.meals = [{
+      id: 'm1', date: TODAY, kind: 'obiad', description: 'coś',
+      createdAt: `${TODAY}T13:00:00.000Z`,
+    }];
+    const score = scoreDay(d, TODAY);
+    expect(score.detail.mealsLogged).toBe(0);
+    expect(score.parts.meals).toBe(0);
+  });
+
+  it('cały komplet celów nadal daje 100', () => {
+    const d = base();
+    d.tasks = [
+      { id: 't1', title: 'A', due: TODAY, difficulty: 3, estimatedMinutes: 60, status: 'done',
+        completedAt: `${TODAY}T12:00:00.000Z`, estimatedBy: 'manual', createdAt: `${TODAY}T08:00:00.000Z` },
+      { id: 't2', title: 'B', due: TODAY, difficulty: 3, estimatedMinutes: 60, status: 'done',
+        completedAt: `${TODAY}T14:00:00.000Z`, estimatedBy: 'manual', createdAt: `${TODAY}T08:00:00.000Z` },
+    ];
+    d.studySessions = [{ id: 's1', date: TODAY, minutes: 120 }];
+    d.workouts = [
+      { id: 'w1', date: TODAY, kind: 'Siłownia', durationMinutes: 60, intensity: 3 },
+      { id: 'w2', date: '2026-09-05', kind: 'Siłownia', durationMinutes: 60, intensity: 3 },
+      { id: 'w3', date: '2026-09-03', kind: 'Siłownia', durationMinutes: 60, intensity: 3 },
+    ];
+    d.meals = [meal(TODAY, 10, 1), meal(TODAY, 10, 2), meal(TODAY, 10, 3)];
+    d.journal = [{ id: 'j1', date: TODAY, text: 'x', score: 10, createdAt: `${TODAY}T20:00:00.000Z` }];
+    expect(scoreDay(d, TODAY).total).toBe(100);
   });
 });
