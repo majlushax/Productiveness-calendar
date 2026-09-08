@@ -11,7 +11,17 @@ const KIND_ICON: Record<string, string> = {
   other: '📌',
 };
 
-type ItemKind = 'fixed' | 'block' | 'done' | 'skipped' | 'workout' | 'session' | 'meal';
+type ItemKind = 'fixed' | 'block' | 'done' | 'skipped' | 'workout' | 'session' | 'meal' | 'deadline';
+
+/**
+ * Wysokość karty rośnie z czasem trwania, żeby lekcje 8:00-12:15 nie wyglądały
+ * jak trzydziestominutowy blok. Dolna granica trzyma czytelność krótkich sesji,
+ * górna nie pozwala jednemu wydarzeniu zająć całego ekranu.
+ */
+function heightFor(minutes: number | undefined): number | undefined {
+  if (!minutes) return undefined;
+  return Math.max(58, Math.min(300, Math.round(40 + minutes * 0.45)));
+}
 
 interface AgendaItem {
   key: string;
@@ -23,6 +33,11 @@ interface AgendaItem {
   workoutId?: string;
   sessionId?: string;
   mealId?: string;
+  taskId?: string;
+  /** Czas trwania w minutach — steruje wysokością karty. */
+  minutes?: number;
+  /** Godzina zakończenia pokazywana przy dłuższych wydarzeniach. */
+  endLabel?: string;
   sortAt: number;
 }
 
@@ -32,7 +47,9 @@ interface AgendaItem {
  * poprawić albo usunąć — pomyłka na telefonie zdarza się często.
  */
 export function DayAgenda({ date, showFixed = true }: { date: ISODate; showFixed?: boolean }) {
-  const { data, setBlockStatus, deleteBlock, deleteWorkout, deleteStudySession, deleteMeal } = useStore();
+  const {
+    data, setBlockStatus, deleteBlock, deleteWorkout, deleteStudySession, deleteMeal, toggleTask,
+  } = useStore();
   const toast = useToast();
 
   const [selected, setSelected] = useState<AgendaItem | null>(null);
@@ -46,12 +63,15 @@ export function DayAgenda({ date, showFixed = true }: { date: ISODate; showFixed
     if (showFixed) {
       for (const e of data.fixedEvents) {
         if (e.weekday !== wd) continue;
+        const minutes = clockToMinutes(e.end) - clockToMinutes(e.start);
         out.push({
           key: `fixed-${e.id}`,
           time: e.start,
           title: `${KIND_ICON[e.kind] ?? '📌'} ${e.title}`,
-          subtitle: `${e.start}–${e.end}`,
+          subtitle: `${e.start}–${e.end} · ${formatDuration(minutes)}`,
           kind: 'fixed',
+          minutes,
+          endLabel: e.end,
           sortAt: clockToMinutes(e.start),
         });
       }
@@ -72,6 +92,8 @@ export function DayAgenda({ date, showFixed = true }: { date: ISODate; showFixed
           formatDuration(b.minutes),
         ].filter(Boolean).join(' · ') + status + (b.locked ? ' · przypięty' : ''),
         kind: b.status === 'done' ? 'done' : b.status === 'skipped' ? 'skipped' : 'block',
+        minutes: b.minutes,
+        endLabel: b.end,
         sortAt: clockToMinutes(b.start),
       });
     }
@@ -122,6 +144,26 @@ export function DayAgenda({ date, showFixed = true }: { date: ISODate; showFixed
       });
     }
 
+    if (data.settings.showDeadlines) {
+      for (const t of data.tasks) {
+        if (t.due !== date || t.status !== 'todo') continue;
+        out.push({
+          key: `due-${t.id}`,
+          taskId: t.id,
+          time: t.dueTime ?? '❗',
+          title: t.title,
+          subtitle: [
+            'termin',
+            t.subject,
+            `trudność ${t.difficulty}/5`,
+          ].filter(Boolean).join(' · '),
+          kind: 'deadline',
+          // Termin bez godziny ląduje na samej górze dnia — ma rzucać się w oczy.
+          sortAt: t.dueTime ? clockToMinutes(t.dueTime) : -1,
+        });
+      }
+    }
+
     return out.sort((a, b) => a.sortAt - b.sortAt);
   }, [data, date, showFixed]);
 
@@ -139,6 +181,10 @@ export function DayAgenda({ date, showFixed = true }: { date: ISODate; showFixed
     if (item.kind === 'fixed') return; // plan tygodnia edytuje się w Ustawieniach
     setSelected(item);
   };
+
+  const selectedTask = selected?.taskId
+    ? data.tasks.find((t) => t.id === selected.taskId) ?? null
+    : null;
 
   const remove = (item: AgendaItem) => {
     if (item.blockId) deleteBlock(item.blockId);
@@ -158,15 +204,24 @@ export function DayAgenda({ date, showFixed = true }: { date: ISODate; showFixed
       <div className="timeline">
         {items.map((item) => (
           <div className="tl-item" key={item.key}>
-            <div className="tl-time">{item.time}</div>
+            <div className="tl-time">
+              <span>{item.time}</span>
+              {/* Godzina końca tylko przy dłuższych wydarzeniach — przy krótkich
+                  byłaby szumem, a i tak nie zmieściłaby się czytelnie. */}
+              {item.endLabel && (item.minutes ?? 0) >= 100 && (
+                <span className="tl-time-end">{item.endLabel}</span>
+              )}
+            </div>
             <div
               className="tl-body"
               data-kind={item.kind}
-              style={
-                item.kind === 'workout' ? { borderLeftColor: 'var(--series-3)' }
+              style={{
+                minHeight: heightFor(item.minutes),
+                ...(item.kind === 'workout' ? { borderLeftColor: 'var(--series-3)' }
                   : item.kind === 'meal' ? { borderLeftColor: 'var(--series-5)' }
-                  : undefined
-              }
+                  : item.kind === 'deadline' ? { borderLeftColor: 'var(--critical)' }
+                  : null),
+              }}
             >
               <div className="row-between" style={{ alignItems: 'flex-start' }}>
                 <button
@@ -211,7 +266,34 @@ export function DayAgenda({ date, showFixed = true }: { date: ISODate; showFixed
         title={selected?.title}
         onClose={() => setSelected(null)}
       >
-        {selected && (
+        {selected && selectedTask && (
+          <div className="stack-sm">
+            <p className="tiny dim">
+              Termin: {selectedTask.due}
+              {selectedTask.dueTime ? `, ${selectedTask.dueTime}` : ''} ·
+              {' '}szacowany czas {formatDuration(selectedTask.estimatedMinutes)}
+            </p>
+            {selectedTask.reasoning && (
+              <div className="banner">{selectedTask.reasoning}</div>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary btn-block"
+              onClick={() => {
+                toggleTask(selectedTask.id);
+                toast('Zadanie zrobione 🎉');
+                setSelected(null);
+              }}
+            >
+              ✓ Oznacz zadanie jako zrobione
+            </button>
+            <button type="button" className="btn btn-ghost btn-block" onClick={() => setSelected(null)}>
+              Anuluj
+            </button>
+          </div>
+        )}
+
+        {selected && !selectedTask && (
           <div className="stack-sm">
             <p className="tiny dim">{selected.subtitle}</p>
 

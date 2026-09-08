@@ -337,6 +337,15 @@ export function SettingsScreen() {
             onChange={(v) => set({ breakMinutes: v })}
           />
           <StepperRow
+            label="Okno nauki przed terminem"
+            value={s.maxLeadDays}
+            min={1}
+            max={21}
+            suffix="dni"
+            hint="Przez tyle dni przed terminem planer rozkłada sesje. Zadanie, które wymaga więcej dni, dostanie je mimo tego ustawienia."
+            onChange={(v) => set({ maxLeadDays: v })}
+          />
+          <StepperRow
             label="Zapas przed terminem"
             value={s.bufferDays}
             min={0}

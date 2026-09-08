@@ -9,7 +9,11 @@ zrobić zadania, i liczy dzienny wskaźnik produktywności.
   wyciąga z tego przedmiot, termin, trudność (1–5) i realny czas pracy.
 - **Automatyczne planowanie.** Planer dzieli zadanie na sesje i rozkłada je po
   wolnych oknach — omija lekcje z planu tygodnia, trzyma dzienny limit nauki
-  i kończy pracę z zapasem przed terminem.
+  i kończy pracę z zapasem przed terminem. Nauka startuje blisko terminu,
+  a nie tydzień wcześniej.
+- **Plan dnia w skali czasu.** Wydarzenia mają wysokość proporcjonalną do długości,
+  więc lekcje 8:00–12:15 to jeden długi blok, a nie kafelek wielkości sesji na pół
+  godziny. Terminy zadań widać w dniu, w którym wypadają.
 - **Wskaźnik produktywności 0–100.** Składa się z ukończonych zadań, czasu nauki,
   treningów (w oknie 7 dni), zgodności posiłków z Twoją dietą i ocenionych przez AI
   wpisów „co dziś zrobiłem".
@@ -109,6 +113,7 @@ Ikony regenerujesz przez `python3 scripts/make-icons.py` (bez zewnętrznych bibl
 | `src/lib/parse.ts` | rozbiór polskiego zdania na termin, przedmiot i typ zadania |
 | `src/lib/gemini.ts` | rozmowa z API Gemini, z fallbackiem do oceny lokalnej |
 | `src/lib/scheduler.ts` | układanie sesji nauki w wolnych oknach grafiku |
+| `src/components/DayAgenda.tsx` | plan dnia: stałe zajęcia, bloki, terminy, wpisy |
 | `src/lib/productivity.ts` | liczenie wyniku dnia i serii |
 | `src/lib/ics.ts` | eksport do Kalendarza Apple |
 | `src/store.tsx` | stan aplikacji i zapis do pamięci przeglądarki |
@@ -136,6 +141,18 @@ za szczerość w zapisywaniu.
 Kategorie oparte na dobrowolnym zapisie (jedzenie, wpisy) nie karzą za brak danych:
 w dniu bez posiłków albo bez notatki ich waga rozkłada się proporcjonalnie na
 pozostałe składniki.
+
+### Kiedy planer zaczyna naukę
+
+Okno nauki liczone jest **wstecz od terminu**, a nie w przód od dzisiaj. Domyślnie
+obejmuje 3 dni przed terminem (ustawienie *Okno nauki przed terminem*), więc
+sprawdzian w poniedziałek dostaje sesje w piątek, sobotę i niedzielę — nie tydzień
+wcześniej.
+
+Zadanie, które wymaga więcej dni, dostaje je mimo tego ustawienia: planer liczy,
+ile dni realnie potrzeba na wszystkie sesje (najwyżej dwie dziennie), i bierze
+większą z tych dwóch wartości. Zadanie po terminie jest wyjątkiem — tam praca
+zaczyna się natychmiast.
 
 ## Ograniczenia
 

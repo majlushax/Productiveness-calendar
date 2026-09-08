@@ -176,6 +176,56 @@ describe('planSchedule', () => {
   });
 });
 
+describe('okno startu nauki', () => {
+  it('nie zaczyna tydzień wcześniej dla zwykłego sprawdzianu', () => {
+    // Sprawdzian w poniedziałek 14.09, dziś poniedziałek 07.09, 180 min pracy.
+    const result = plan(withTasks([makeTask({ estimatedMinutes: 180, due: '2026-09-14' })]));
+    const first = result.blocks.map((b) => b.date).sort()[0];
+    // Dwie sesje po 90 min mieszczą się w dwóch dniach — start ma być pod koniec
+    // okna, nie siedem dni przed terminem.
+    expect(first >= '2026-09-11').toBe(true);
+    expect(result.blocks.reduce((sum, b) => sum + b.minutes, 0)).toBe(180);
+  });
+
+  it('duże zadanie dostaje szersze okno, mimo limitu luzu', () => {
+    const result = plan(withTasks([makeTask({ estimatedMinutes: 900, due: '2026-09-21' })]));
+    const days = new Set(result.blocks.map((b) => b.date));
+    expect(days.size).toBeGreaterThanOrEqual(5);
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it('ustawienie maxLeadDays przesuwa start', () => {
+    const early = withTasks([makeTask({ estimatedMinutes: 180, due: '2026-09-14' })]);
+    early.settings.maxLeadDays = 7;
+    const late = withTasks([makeTask({ estimatedMinutes: 180, due: '2026-09-14' })]);
+    late.settings.maxLeadDays = 2;
+
+    const firstEarly = plan(early).blocks.map((b) => b.date).sort()[0];
+    const firstLate = plan(late).blocks.map((b) => b.date).sort()[0];
+    expect(firstEarly < firstLate).toBe(true);
+  });
+
+  it('zadanie na jutro nadal planuje się od razu', () => {
+    const result = plan(withTasks([makeTask({ estimatedMinutes: 60, due: '2026-09-08' })]));
+    expect(result.blocks.length).toBeGreaterThan(0);
+    expect(result.blocks[0].date).toBe('2026-09-07');
+  });
+
+  it('zadanie po terminie nadal ląduje na dziś', () => {
+    const result = plan(withTasks([makeTask({ estimatedMinutes: 60, due: '2026-09-01' })]));
+    expect(result.blocks.map((b) => b.date)).toContain('2026-09-07');
+  });
+
+  it('gdy okno nie wystarcza, praca rozlewa się na wcześniejsze dni', () => {
+    // 1200 min przy limicie 240 min dziennie wymaga co najmniej pięciu dni.
+    const result = plan(withTasks([makeTask({ estimatedMinutes: 1200, due: '2026-09-21' })]));
+    const total = result.blocks.reduce((sum, b) => sum + b.minutes, 0);
+    const days = new Set(result.blocks.map((b) => b.date));
+    expect(total).toBeGreaterThan(900);
+    expect(days.size).toBeGreaterThanOrEqual(5);
+  });
+});
+
 describe('freeCapacityUntil', () => {
   it('liczy wolne minuty do terminu', () => {
     const data = emptyData();

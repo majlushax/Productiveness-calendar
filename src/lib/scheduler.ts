@@ -153,10 +153,27 @@ export function planSchedule(
     const preferredLast = overdue
       ? lastDay
       : maxDate(today, addDays(task.due, -s.bufferDays));
-    const days = dateRange(today, preferredLast);
-    const fallbackDays = dateRange(addDays(preferredLast, 1), lastDay);
 
     const chunks = splitIntoChunks(remaining, s.minBlockMinutes, s.maxBlockMinutes);
+
+    // Nauka ma się zaczynać blisko terminu, a nie tydzień wcześniej. Okno
+    // liczymy wstecz od dnia docelowego przez maxLeadDays dni. Zadanie, które
+    // wymaga więcej dni (najwyżej dwie sesje dziennie), dostaje je mimo to —
+    // ustawienie skraca zaczynanie na zapas, nie odbiera potrzebnego czasu.
+    // Zadanie po terminie jest wyjątkiem: tam liczy się każdy dzień od dziś.
+    const daysNeeded = Math.ceil(chunks.length / 2);
+    const lead = Math.max(daysNeeded, s.maxLeadDays);
+    const windowStart = overdue
+      ? today
+      : maxDate(today, addDays(preferredLast, -(lead - 1)));
+
+    const days = dateRange(windowStart, preferredLast);
+    // Gdy okno nie wystarcza: najpierw dni tuż przed nim (od najbliższego),
+    // dopiero potem dni po dniu docelowym, aż do samego terminu.
+    const fallbackDays = [
+      ...dateRange(today, addDays(windowStart, -1)).reverse(),
+      ...dateRange(addDays(preferredLast, 1), lastDay),
+    ];
     const placedDays: ISODate[] = [];
     let placedMinutes = 0;
 
