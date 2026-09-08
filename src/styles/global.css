@@ -572,6 +572,17 @@ p { margin: 0; }
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
   padding-top: 13px;
+  padding-bottom: 13px;
+  /* Przy długich wydarzeniach godziny rozjeżdżają się na górę i dół kolumny,
+     przez co sama odległość między nimi pokazuje czas trwania. */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.tl-time-end {
+  color: var(--text-3);
+  font-weight: 600;
 }
 
 .tl-body {
@@ -587,6 +598,13 @@ p { margin: 0; }
 .tl-body[data-kind='fixed'] { border-left-color: var(--text-3); background: var(--surface-2); }
 .tl-body[data-kind='done'] { border-left-color: var(--good); opacity: 0.72; }
 .tl-body[data-kind='skipped'] { border-left-color: var(--critical); opacity: 0.6; }
+
+/* Termin nie jest blokiem pracy, tylko punktem w czasie — czytelnie inny. */
+.tl-body[data-kind='deadline'] {
+  border-left-width: 3px;
+  border-color: color-mix(in srgb, var(--critical) 40%, var(--border));
+  background: color-mix(in srgb, var(--critical) 8%, var(--surface));
+}
 
 /* --------------------------- wykresy -------------------------- */
 

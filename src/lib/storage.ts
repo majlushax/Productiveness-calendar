@@ -30,6 +30,8 @@ export const DEFAULT_SETTINGS: Settings = {
   maxBlockMinutes: 90,
   breakMinutes: 15,
   bufferDays: 1,
+  maxLeadDays: 3,
+  showDeadlines: true,
   dailyCapMinutes: 240,
   theme: 'dark',
 };

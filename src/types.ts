@@ -143,6 +143,14 @@ export interface Settings {
   breakMinutes: number;
   /** Ile dni przed terminem planer stara się skończyć zadanie. */
   bufferDays: number;
+  /**
+   * Przez ile dni przed terminem rozkładać naukę. Zadanie, które wymaga więcej
+   * dni, dostanie je mimo tego ustawienia — wartość ogranicza zaczynanie na
+   * zapas, nie odbiera potrzebnego czasu.
+   */
+  maxLeadDays: number;
+  /** Czy terminy zadań pojawiają się w planie dnia jako osobne wydarzenia. */
+  showDeadlines: boolean;
   /** Górny limit zaplanowanej nauki na jeden dzień. */
   dailyCapMinutes: number;
   theme: 'dark' | 'light' | 'auto';
