@@ -11,7 +11,7 @@ const KIND_ICON: Record<string, string> = {
   other: '📌',
 };
 
-type ItemKind = 'fixed' | 'block' | 'done' | 'skipped' | 'workout' | 'session';
+type ItemKind = 'fixed' | 'block' | 'done' | 'skipped' | 'workout' | 'session' | 'meal';
 
 interface AgendaItem {
   key: string;
@@ -22,7 +22,7 @@ interface AgendaItem {
   blockId?: string;
   workoutId?: string;
   sessionId?: string;
-  journalId?: string;
+  mealId?: string;
   sortAt: number;
 }
 
@@ -32,7 +32,7 @@ interface AgendaItem {
  * poprawić albo usunąć — pomyłka na telefonie zdarza się często.
  */
 export function DayAgenda({ date, showFixed = true }: { date: ISODate; showFixed?: boolean }) {
-  const { data, setBlockStatus, deleteBlock, deleteWorkout, deleteStudySession } = useStore();
+  const { data, setBlockStatus, deleteBlock, deleteWorkout, deleteStudySession, deleteMeal } = useStore();
   const toast = useToast();
 
   const [selected, setSelected] = useState<AgendaItem | null>(null);
@@ -106,6 +106,22 @@ export function DayAgenda({ date, showFixed = true }: { date: ISODate; showFixed
       });
     }
 
+    for (const m of data.meals) {
+      if (m.date !== date) continue;
+      out.push({
+        key: `meal-${m.id}`,
+        mealId: m.id,
+        time: '🍽',
+        title: m.kind.charAt(0).toUpperCase() + m.kind.slice(1),
+        subtitle: [
+          m.description,
+          typeof m.score === 'number' ? `zgodność ${m.score}/10` : null,
+        ].filter(Boolean).join(' · '),
+        kind: 'meal',
+        sortAt: 24 * 60 + 3,
+      });
+    }
+
     return out.sort((a, b) => a.sortAt - b.sortAt);
   }, [data, date, showFixed]);
 
@@ -128,6 +144,7 @@ export function DayAgenda({ date, showFixed = true }: { date: ISODate; showFixed
     if (item.blockId) deleteBlock(item.blockId);
     else if (item.workoutId) deleteWorkout(item.workoutId);
     else if (item.sessionId) deleteStudySession(item.sessionId);
+    else if (item.mealId) deleteMeal(item.mealId);
     toast('Usunięto');
     setSelected(null);
   };
@@ -145,7 +162,11 @@ export function DayAgenda({ date, showFixed = true }: { date: ISODate; showFixed
             <div
               className="tl-body"
               data-kind={item.kind}
-              style={item.kind === 'workout' ? { borderLeftColor: 'var(--series-3)' } : undefined}
+              style={
+                item.kind === 'workout' ? { borderLeftColor: 'var(--series-3)' }
+                  : item.kind === 'meal' ? { borderLeftColor: 'var(--series-5)' }
+                  : undefined
+              }
             >
               <div className="row-between" style={{ alignItems: 'flex-start' }}>
                 <button

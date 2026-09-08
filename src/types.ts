@@ -72,6 +72,21 @@ export interface StudySession {
   note?: string;
 }
 
+export type MealKind = 'śniadanie' | 'obiad' | 'kolacja' | 'przekąska';
+
+/** Posiłek oceniany pod kątem zgodności z dietą użytkownika. */
+export interface Meal {
+  id: string;
+  date: ISODate;
+  kind: MealKind;
+  description: string;
+  /** Zgodność z dietą 0–10. */
+  score?: number;
+  comment?: string;
+  scoredBy?: 'ai' | 'heuristic';
+  createdAt: string;
+}
+
 /** Wpis "co dziś zrobiłem" oceniany przez AI. */
 export interface JournalEntry {
   id: string;
@@ -90,12 +105,15 @@ export interface Goals {
   studyMinutesPerDay: number;
   /** Ile "punktów zadaniowych" dziennie (punkt = trudność zadania). */
   taskPointsPerDay: number;
+  /** Ile posiłków dziennie chcesz zapisywać — mianownik oceny jedzenia. */
+  mealsPerDay: number;
 }
 
 export interface Weights {
   tasks: number;
   study: number;
   workout: number;
+  meals: number;
   journal: number;
 }
 
@@ -107,6 +125,10 @@ export interface AvailabilityWindow {
 export interface Settings {
   geminiApiKey: string;
   geminiModel: string;
+  /** Ogólne wytyczne użytkownika doklejane do każdego zapytania do AI. */
+  aiInstructions: string;
+  /** Opis diety — podstawa oceny posiłków. */
+  dietDescription: string;
   goals: Goals;
   weights: Weights;
   availability: {
@@ -133,6 +155,7 @@ export interface AppData {
   fixedEvents: FixedEvent[];
   workouts: Workout[];
   studySessions: StudySession[];
+  meals: Meal[];
   journal: JournalEntry[];
   settings: Settings;
 }
@@ -156,6 +179,7 @@ export interface DayScore {
     tasks: number;
     study: number;
     workout: number;
+    meals: number;
     journal: number;
   };
   /** Surowe liczby do podpisów pod wskaźnikiem. */
@@ -165,6 +189,8 @@ export interface DayScore {
     studyMinutes: number;
     workoutsLast7: number;
     workedOutToday: boolean;
+    mealPoints: number;
+    mealsLogged: number;
     journalScore: number | null;
   };
 }

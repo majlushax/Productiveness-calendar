@@ -38,14 +38,19 @@ export function StatsScreen() {
     (t) => t.status === 'done' && (t.completedAt ?? '').slice(0, 10) >= from,
   ).length;
   const tasksOverdue = data.tasks.filter((t) => t.status === 'todo' && t.due < today).length;
+  const periodMeals = data.meals.filter((m) => m.date >= from && m.date <= today && typeof m.score === 'number');
+  const mealAverage = periodMeals.length
+    ? periodMeals.reduce((sum, m) => sum + (m.score ?? 0), 0) / periodMeals.length
+    : null;
 
   /** Średnie udziały składników — pokazują, co realnie ciągnie wynik w górę. */
   const averageParts = useMemo(() => {
-    const sum = { tasks: 0, study: 0, workout: 0, journal: 0 };
+    const sum = { tasks: 0, study: 0, workout: 0, meals: 0, journal: 0 };
     for (const s of scores) {
       sum.tasks += s.parts.tasks;
       sum.study += s.parts.study;
       sum.workout += s.parts.workout;
+      sum.meals += s.parts.meals;
       sum.journal += s.parts.journal;
     }
     const n = Math.max(1, scores.length);
@@ -53,6 +58,7 @@ export function StatsScreen() {
       tasks: Math.round(sum.tasks / n),
       study: Math.round(sum.study / n),
       workout: Math.round(sum.workout / n),
+      meals: Math.round(sum.meals / n),
       journal: Math.round(sum.journal / n),
     };
   }, [scores]);
@@ -66,6 +72,8 @@ export function StatsScreen() {
         workouts,
         tasksDone,
         tasksOverdue,
+        mealsLogged: periodMeals.length,
+        mealAverage,
         journalNotes: data.journal
           .filter((j) => j.date >= from)
           .slice(-7)
@@ -175,6 +183,11 @@ export function StatsScreen() {
             <StatRow label="Czas nauki" value={formatDuration(studyMinutes)} color={PART_META[1].color} />
             <StatRow label="Treningi" value={`${workouts}`} color={PART_META[2].color} />
             <StatRow label="Ukończone zadania" value={`${tasksDone}`} color={PART_META[0].color} />
+            <StatRow
+              label="Posiłki"
+              value={mealAverage === null ? '—' : `${periodMeals.length} · średnio ${mealAverage.toFixed(1)}/10`}
+              color={PART_META[4].color}
+            />
             <StatRow label="Wpisy" value={`${data.journal.filter((j) => j.date >= from).length}`} color={PART_META[3].color} />
             {tasksOverdue > 0 && (
               <StatRow label="Zadania po terminie" value={`${tasksOverdue}`} color="var(--critical)" />

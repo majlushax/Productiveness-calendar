@@ -75,7 +75,8 @@ export function SettingsScreen() {
     reader.readAsText(file);
   };
 
-  const weightsTotal = s.weights.tasks + s.weights.study + s.weights.workout + s.weights.journal;
+  const weightsTotal =
+    s.weights.tasks + s.weights.study + s.weights.workout + s.weights.meals + s.weights.journal;
 
   return (
     <div className="screen">
@@ -159,6 +160,47 @@ export function SettingsScreen() {
               {busy === 'test' ? <span className="spinner" /> : 'Testuj'}
             </button>
           </div>
+        </section>
+
+        {/* ----------------------- personalizacja AI ---------------------- */}
+        <section className="card stack">
+          <div className="section-label" style={{ margin: 0 }}>Twoje wytyczne dla AI</div>
+          <p className="tiny dim">
+            Doklejane do każdego zapytania — oceny zadań, wpisów, posiłków i podsumowań
+            tygodnia. Napisz, co AI ma o Tobie wiedzieć i jak ma Cię oceniać.
+          </p>
+          <textarea
+            className="textarea"
+            rows={5}
+            value={s.aiInstructions}
+            placeholder={'np. Jestem w 3 klasie liceum, profil mat-fiz.\nNie owijaj w bawełnę, wolę krótko i konkretnie.\nTrening liczy się dla mnie tak samo jak nauka.'}
+            onChange={(e) => set({ aiInstructions: e.target.value })}
+          />
+          {s.aiInstructions.trim().length > 0 && (
+            <span className="tiny dim">{s.aiInstructions.trim().length} znaków</span>
+          )}
+        </section>
+
+        <section className="card stack">
+          <div className="section-label" style={{ margin: 0 }}>Dieta</div>
+          <p className="tiny dim">
+            Na tej podstawie AI ocenia posiłki. Opisz swoje zasady własnymi słowami —
+            model porównuje jedzenie do tego opisu, a nie do ogólnych wyobrażeń
+            o zdrowym odżywianiu.
+          </p>
+          <textarea
+            className="textarea"
+            rows={4}
+            value={s.dietDescription}
+            placeholder={'np. Jem dużo mięsa: steki, wołowina, jajka.\nDo tego ziemniaki, ryż, owoce i warzywa.\nUnikam fast foodów, słodyczy i słodkich napojów.'}
+            onChange={(e) => set({ dietDescription: e.target.value })}
+          />
+          {!s.dietDescription.trim() && (
+            <div className="banner">
+              Bez opisu diety posiłki dostają prostą ocenę lokalną opartą na słowach
+              kluczowych. Wpisz swoje zasady, żeby oceniało je AI.
+            </div>
+          )}
         </section>
 
         {/* -------------------------- plan tygodnia ----------------------- */}
@@ -245,6 +287,14 @@ export function SettingsScreen() {
             onChange={(v) => set({ goals: { ...s.goals, taskPointsPerDay: v } })}
           />
           <StepperRow
+            label="Posiłki dziennie"
+            value={s.goals.mealsPerDay}
+            min={1}
+            max={8}
+            hint="Mianownik oceny jedzenia: cel to liczba posiłków razy 10 punktów."
+            onChange={(v) => set({ goals: { ...s.goals, mealsPerDay: v } })}
+          />
+          <StepperRow
             label="Próg serii"
             value={s.streakThreshold}
             step={5}
@@ -315,11 +365,14 @@ export function SettingsScreen() {
           <p className="tiny dim">
             Ile każda kategoria waży w dziennym wyniku. Suma: {weightsTotal} — wartości
             są przeliczane proporcjonalnie, więc nie musi wynosić dokładnie 100.
+            Jedzenie i wpisy liczą się tylko w dni, w których coś zapisałeś; w pozostałe
+            ich waga rozkłada się na resztę kategorii.
           </p>
           {([
             ['tasks', 'Zadania', 'var(--series-1)'],
             ['study', 'Nauka', 'var(--series-2)'],
             ['workout', 'Siłownia', 'var(--series-3)'],
+            ['meals', 'Jedzenie', 'var(--series-5)'],
             ['journal', 'Wpisy', 'var(--series-4)'],
           ] as const).map(([key, label, color]) => (
             <div className="stack-sm" key={key}>

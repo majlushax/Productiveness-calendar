@@ -16,6 +16,7 @@ export const PART_META = [
   { key: 'study', label: 'Nauka', color: 'var(--series-2)' },
   { key: 'workout', label: 'Siłownia', color: 'var(--series-3)' },
   { key: 'journal', label: 'Wpisy', color: 'var(--series-4)' },
+  { key: 'meals', label: 'Jedzenie', color: 'var(--series-5)' },
 ] as const;
 
 /* --------------------------- pierścień --------------------------- */

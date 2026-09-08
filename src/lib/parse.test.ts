@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { heuristicEstimate, parsePolishDate } from './parse';
+import { heuristicMeal } from './gemini';
 
 const TODAY = '2026-09-07'; // poniedziałek
 
@@ -81,5 +82,30 @@ describe('heuristicEstimate', () => {
     expect(e.estimatedMinutes).toBeGreaterThanOrEqual(15);
     expect(e.difficulty).toBeGreaterThanOrEqual(1);
     expect(e.difficulty).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('heuristicMeal', () => {
+  it('nagradza produkty nieprzetworzone', () => {
+    const good = heuristicMeal('stek wołowy, ziemniaki, sałatka z pomidorów');
+    expect(good.score).toBeGreaterThanOrEqual(7);
+    expect(good.source).toBe('heuristic');
+  });
+
+  it('obniża ocenę za jedzenie mocno przetworzone', () => {
+    const bad = heuristicMeal('frytki z mcdonalda i cola');
+    expect(bad.score).toBeLessThanOrEqual(2);
+  });
+
+  it('nigdy nie wychodzi poza skalę 0-10', () => {
+    for (const t of ['', 'stek stek stek stek jajka ziemniaki owoce', 'chipsy batonik lody cola frytki kebab']) {
+      const v = heuristicMeal(t);
+      expect(v.score).toBeGreaterThanOrEqual(0);
+      expect(v.score).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('opis bez rozpoznanych produktów dostaje ocenę neutralną', () => {
+    expect(heuristicMeal('coś tam zjadłem').score).toBe(5);
   });
 });
